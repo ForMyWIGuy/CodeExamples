@@ -1,6 +1,13 @@
-#install.packages("readxl")
-library(readxl)
+### Final project for CSCI 5465. I dowloaded the data provided and reporduced the analysis as reported in a journal article including many of the the figures
+# Reference:
+# Su, J., Cheng, J., Hu, Y., Yu, Q., Li, Z., Li, J., Zheng, N., Zhang, Z., Yang, J., Li, X., Zhang, Z., Wang, Y., Zhu, K., Du, W., & Chen, X. (2022). 
+# Transfer RNA-derived small RNAs and their potential roles in the therapeutic heterogeneity of 
+# sacubitril/valsartan in heart failure patients after acute myocardial infarction. 
+# Frontiers in cardiovascular medicine, 9, 961700. https://doi.org/10.3389/fcvm.2022.961700
 
+
+install.packages("readxl")
+library(readxl)
 setwd('~/Desktop/CSCI5465_project/Project_data')
 spreadsheet_data  <- (read_xlsx('~/Desktop/CSCI5465_project/Project_data/GSE207882_Expression_tRF.xlsx', col_names = TRUE, skip=11))
 resistance_status <- read.csv(file = 'resistance_status.csv')
