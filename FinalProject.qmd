@@ -1,5 +1,5 @@
 ---
-title: "Final Project"
+title: "Final Project HINF 5531"
 author: "Tiffany M. Berg"
 format:
   html:
