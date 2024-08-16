@@ -1,3 +1,7 @@
+## Final project for Biostatistics 1 PUBH 6450:
+# This is the code for analysis of a data set regarding post partum hemmorrage
+# Final report titled: Final project Bioistatistics 1_Spring 24.pdf
+
 setwd("~/Desktop/Spring 2024 Classes/Biostats I PUBH 6040/wk8_project1")
 library(readr)
 pph <- read_csv("PPH-Oxytocin-RCT.csv")  
