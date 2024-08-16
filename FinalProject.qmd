@@ -1,0 +1,87 @@
+---
+title: "Final Project"
+author: "Tiffany M. Berg"
+format:
+  html:
+    embed-resources: true
+    paged: true
+editor: visual
+---
+
+## Course Project: Exploring a Large Data Set
+Assimilation of database information from the recent acquisition of 
+
+```{r}
+#| label: "Import Data"
+#| warning: false
+#| echo: false
+
+setwd("~/Desktop/Spring_2024Classes/HealthDataAnalyticsHINF5531/HINF 5531 Final Project/HINF 5531 Course Project Data Files")
+library(tidyverse)
+library(readr)
+
+departments <- read_csv("departments.csv")
+
+disease_types <- read_csv("disease_types.csv")
+
+diseases <- read_csv("diseases.csv")
+
+encounters <- read_csv("encounters.csv", 
+    col_types = cols(patient_id = col_character()), 
+    na = "NULL")
+
+medication_types <- read_csv("medication_types.csv")
+
+medications <- read_csv("medications.csv", 
+   na = "NULL")
+
+patients <- read_csv("patients.csv", col_types = cols(gender = col_factor(levels = c("M", "F"))))
+
+providers <- read_csv("providers.csv", col_types = cols(gender = col_factor(levels = c("M", "F"))))
+
+```
+
+You can add options to executable code like this
+
+```{r}
+#|label: "Counts"
+
+count(patients)
+count(encounters)
+count(medication_types)
+count(disease_types)
+count(diseases)
+count(departments)
+count(providers)
+```
+
+```{r}
+
+group_by(patients, gender, race, marital_status) 
+table(patients$gender, patients$race, patients$marital_status)
+
+```
+
+```{r}
+#|label: "Most Common:"
+
+## Top 10 Common Medications:
+com.meds <- count(medications, medications$medication_id, sort=TRUE)
+
+top.10.meds <- com.meds[1:10,]
+com.meds.names <- medication_types$medication_name[which(medication_types$medication_id %in% top.10.meds$`medications$medication_id`)]
+
+enc.group <- group_by(encounters, encounter_id, patient_id)
+sort(count(enc.group, enc.group$encounter_id), descending=TRUE)
+
+med.id.list <- medications$medication_id
+#mlist <- as.numeric(mlist)
+table(med.id.list) ## counts for each occurrence in the med.id list
+max(table(med.id.list)) ## the number of times the  frequently occurring one appears
+sort(table(med.id.list), decreasing = TRUE)[1:10]
+
+
+meds.encount <- select(encounters, medications, encounters$encounter_id == medications$encounter_id)
+
+
+```
