@@ -1,0 +1,497 @@
+---
+title: "Report & analysis from external facility acquisition"
+author: "Tiffany M. Berg"
+format:
+   html:
+      df-print: paged
+      embed-resources: true
+---
+
+## [**Data analysis report from external facility acquisition**]{.underline}
+
+[**Part A: Introduction**]{.underline}
+
+Following acquisition of the new health system, assimilation of the external health record database was commenced. The data was loaded and subsequently required formatting to match the health record in use currently. This report outlines the first pass analysis of the data.
+
+[**Part B: Data Summary**]{.underline}
+
+**Section 1:**
+
+Review of counts from the external facility data tables can be found in Table 1A. The acquired facility had 500,000 unique patients from diverse ethnic backgrounds. A demographic summary of patients absorbed as part of the merger are outlined in Table 1B.
+
+```{r}
+#| label: "data download, formatting and initial counts table"
+#| echo: false
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(readr)
+library(knitr)
+
+# ## data import and formatting 
+departments <- read.csv("departments.csv")
+
+disease_types <- read.csv("disease_types.csv")
+
+diseases <- read.csv("diseases.csv")
+diseases$date <- ymd_hms(diseases$date)
+diseases$date <- as.Date(diseases$date)
+
+encounters <- read.csv("encounters.csv", na.strings = "NULL")
+encounters$admit_date <- ymd_hms(encounters$admit_date)
+#encounters$admit_date <- as.Date(encounters$admit_date)
+encounters$discharge_date <- ymd_hms(encounters$discharge_date)
+#encounters$discharge_date <- as.Date(encounters$discharge_date)
+
+medication_types <- read.csv("medication_types.csv")
+
+medications <- read.csv("medications.csv", na.strings = "NULL")
+medications$date <- ymd_hms(medications$date)
+medications$date <- as.Date(medications$date)
+
+
+patients <- read_csv("patients.csv", col_types = cols(gender = col_factor(levels = c("F", "M"))))
+
+providers <- read_csv("providers.csv", col_types = cols(gender = col_factor(levels = c("F", "M"))))
+
+## Initial counts
+num.pts <- n_distinct(patients$patient_id)
+num.enc <- n_distinct(encounters$encounter_id)
+num.medtype <- n_distinct(medication_types$medication_id) 
+num.meds <- n_distinct(medications$medication_id)
+num.dztypes <- n_distinct(disease_types$disease_id) 
+num.dz <- n_distinct(diseases$disease_id)
+num.dept <- n_distinct(departments$department_id)
+num.provid <- n_distinct(providers$provider_id) 
+
+counts.table <- c(num.pts, num.enc, num.medtype, num.meds, num.dztypes, num.dz, num.dept, num.provid)
+counts.table.labels <- c("Patients", "Encounters", "Medication Types", "Medications Administered", "Disease Types", "Diseases",
+                         "Deptartments", "Providers")
+df.counts <- data.frame(counts.table.labels, counts.table)
+kable(df.counts, align = "lc", col.names = c("Category", "Count"), caption = "Table 1A: Count Summary")
+  
+
+```
+
+```{r}
+#| echo: false
+#| label: "demographic summary table"
+table1 <- table(patients$marital_status, patients$race, patients$gender)
+library(knitr)
+kable(table1, align= "lccc", col.names = c( "Marital Staus","Race/Ethnicity", "Sex/Gender", "Frequency"),
+      caption = "Table 1B: Demographic Summary of Patients")
+
+```
+
+[**Part B**]{.underline}
+
+**Section 2:**
+
+Within the set of data from patient care encounters, a number of medications were utilized in the course of patient care. The most common medications, diseases diagnosed/treated, managing departments, and providers within the data set are outlined in the following tables. Table 2A, 2B, 2C, and 2D.
+
+```{r}
+#| label: "Top 10 most common"
+#| echo: false
+#| warning: false
+#| message: false
+
+## Names of the Top 10 Common Medications:
+com.meds <- count(medications, medications$medication_id, sort=TRUE)
+top.10.meds <- com.meds[1:10,]
+com.meds.names <- medication_types$medication_name[which(medication_types$medication_id %in% top.10.meds$`medications$medication_id`)]
+kable(com.meds.names, col.names = c("Name of Medication"), caption = "Table 2A: Top 10 Most Common Medications")
+
+## Names of the Top 10 Diseases diagnosed for patients:
+comm.dz <- count(diseases, disease_id, sort = TRUE)
+top.10.dz <- comm.dz[1:10,]
+num.dz <- which(disease_types$disease_id %in% top.10.dz$disease_id)
+names.top10.dz <- disease_types$name[num.dz]
+kable(names.top10.dz, col.names = c("Name of Disease/Diagnosis"), caption = "Table 2B: Top 10 Most Common Diseases/Diagnoses")
+
+## Names of the Top 10 Most Common Departments:
+com.enc <- count(encounters, dept.id=encounters$department_id, sort = TRUE)
+top.10.enc <- com.enc[1:10, ]
+dept.names <- departments$department_name[which(departments$department_id %in% top.10.enc$dept.id)]
+kable(dept.names, col.names = c("Name of Department"), caption = "Table 2C: Top 10 Most Common Encounter Departments")
+
+## Names of the Top 10 Most Common Providers:
+com.prov <- count(encounters, prov.id=encounters$provider_id, sort = TRUE)
+top.10.prov <- com.prov[1:10, ]
+popular.providers <- providers[which(providers$provider_id %in% top.10.prov$prov.id), ]
+kable(popular.providers, align= "llclcl" , caption = "Table 2D: Top 10 Most Common Providers")
+
+
+```
+
+[**Part C: Data Manipulation**]{.underline}
+
+**Section 1: BMI Review**
+
+Initial examination of the height and weight data included within the encounters with BMI calculation reveals extremely high BMI values as well as multiple BMI values that are far lower than expected. Normal BMI ranges from underweight at 18 to obesity with BMI of 30 or more. Review of the height and weight data suggests utilization of inconsistent units or errors in data entry were common. Overall, it appears English units of inches and pounds were entered thus BMI was calculated with the conversion equation using inches and pounds.
+
+Very high weights are present in the data which have skewed the BMI calculations. Patient number 1344083 is a good example of the suspect data observed. In encounter number 20340735, the patient is reported as 4 years old and has a weight reported which is greater than 770 pounds which is completely unreasonable. While it is possible this 4 year old weighed 77 pounds, that value still places the child in the 100th percentile for age and weight on the normal growth charts. There is no way to make the value provided fit within a reasonable range.
+
+Unusual height measurements were also observed. Patient 994574 in encounter number 15801373 was reported with an age of 25 years, weight of over 747 pounds and height of 8.50. It was observed that most values fit inches as a likely unit of measure, but this value does not seem to be a reasonable value using any unit of length measurement. The best possible guess is that this should have been entered as 85 inches and the patient was just over 7 feet tall. Further consideration will be needed prior to incorporating the available height and weight data into the current EHR. Consider omitting this data and obtaining updated information with the patient's first encounter following the merger.
+
+BMI data is reported by gender, by race and simultaneously by race and gender in tables 3A, 3B, and 3C.
+
+```{r}
+#| label: "BMI analysis"
+#| echo: false
+#| warning: false
+#| message: false
+
+high_weights <- slice_max(encounters, weight, n = 10)
+
+pts_encout <- inner_join(encounters, patients, by = join_by(x$patient_id == y$patient_id))
+pts_encout$BMI <- (pts_encout$weight/(pts_encout$height*pts_encout$height))*703
+
+pts_encout |>
+   group_by(gender) |>
+   summarise(mean.bmi.gender = mean(BMI, na.rm = TRUE)) |>
+   kable( align = "cc", col.names = c("Gender", "Mean BMI"),
+          caption = "Table 3A: Mean BMI by Gender")
+
+pts_encout |>
+   group_by(race) |>
+   summarise(mean.bmi.race = mean(BMI, na.rm = TRUE)) |>
+   kable( align = "lc", col.names = c("Race", "Mean BMI"),
+   caption = "Table 3B: Mean BMI by Race")
+
+pts_encout |>
+   group_by(gender, race) |>
+   summarise(mean.bmi.gender.race = mean(BMI, na.rm = TRUE)) |>
+   kable( align = "llc", col.names = c("Gender", "Race", "Mean BMI"),
+   caption = "Table 3C: Mean BMI by Gender and Race")
+
+```
+
+[**Part C: Data Manipulation**]{.underline}
+
+**Section 2: Length of Stay Review**
+
+Analysis of length of stay data from the external database was performed. Data was filtered to review only lengths of stay greater than one day and are reported by patient gender (table 3D), by department (table 3E) and by gender and department simultaneously (table 3F).
+
+The external facility had a number of departments with very long hospital admission lengths of stay which should be further evaluated. The Audiology department had a mean length of stay of 90 days which is unexpectedly long in light of the ICU which had a mean length of stay of 9 days.
+
+```{r}
+#| label: "LOS analysis"
+#| echo: false
+#| warning: false
+#| message: false
+
+library(lubridate)
+# encounters$date.admit <- as.Date(encounters$admit_date)
+# encounters$date.dc <- as.Date(encounters$discharge_date)
+
+encounters <- mutate(encounters, los=(encounters$discharge_date-encounters$admit_date))
+encounters <- mutate(encounters, los_days=as.numeric(encounters$los, units = "days"))
+
+pts_encout$los_1day <- ifelse((encounters$los_days > 1), encounters$los_days, NA)
+
+pts_encout |>
+   group_by(gender) |>
+   summarise(mean_los = floor(mean(los_1day, na.rm = TRUE))) |>
+   kable( align = "cc", col.names = c("Gender", "Mean length of Stay (days)"), caption = "Table 3D: Mean Length of Stay by Patient's Gender")
+
+pts_encout <- inner_join(pts_encout, departments, by = join_by(x$department_id == y$department_id))
+
+
+pts_encout |>
+   group_by(department_id, department_name) |>
+   summarise(mean_los = floor(mean(los_1day, na.rm = TRUE))) |>
+   kable( align = "clc", col.names=c("Department Id Number","Department Name", "Mean length of Stay (days)"), caption = "Table 3E: Mean Length of Stay by Managing Department")
+
+pts_encout |>
+   group_by(department_id, department_name, gender) |>
+   summarise(mean_los = floor(mean(los_1day, na.rm = TRUE))) |>
+   kable( align = "clc", 
+   col.names = c("Department Id Number","Department Name", "Gender", "Mean LOS (days)"), caption = "Table 3F: Mean Length of stay by Gender and Department")
+
+```
+
+[**Part D: Data Visualization**]{.underline}
+
+**Section 1: Patient Age**
+
+Providing healthcare to patients across the lifespan is a central value of our mission. The acquired facility had patients of all ages. It is noted that fewer encounters occurred for children than for patients between 20 and 60 years old. Graphics to visualize the ages of patients are presented in figure 4A for all patients and 4B for pediatric patients.
+
+```{r}
+#| label: "data visualization: patient's age histogram"
+#| echo: false
+#| warning: false
+#| message: false
+
+#1. Histogram of patients age at time of encounter 
+hist(pts_encout$age, xlab = "Patient Age", ylab = "Frequency", 
+     main = "Figure 4A: Frequency of Patient Age at the Time of Encounter (All Patients)", col = "slateblue")
+
+kids <- pts_encout$age[which(pts_encout$age < 18)]
+
+hist(kids, breaks = 50, xlab = "Kids Ages", ylab = "Frequency", main = "Figure 4B: Frequency of Patient Age for Encounters with Pediatric Patients", col = "lightblue")
+
+```
+
+[**Part D: Data Visualization**]{.underline}
+
+**Section 2: Number of Encounters**
+
+The majority of patients had fewer than 500 encounters at the external facility, but 62 patients had over 1,000 encounters. Visualizations of number of encounters is challenging due to the large right skew in the data. Several graphics are provided to better visualize the overall encounter frequency and ranges are provided in the title of each histogram, figures 4C to 4H.
+
+```{r}
+#| label: "Number of Encounters visualization"
+#| echo: false
+#| warning: false
+#| message: false
+
+pts_encout <- group_by(pts_encout, patient_id)
+num.visits <- summarise(pts_encout, visits = n())
+
+# lt2k.visits <- num.visits[which(num.visits$visits<2000), ]
+# length(which(num.visits$num.visits> 1000)) # 62 patients
+# length(which(num.visits$num.visits> 2000)) # 7 patients
+
+hist(num.visits$visits, breaks=500, col = "slateblue", main = "Figure 4C: All Patient Visit Frequencies", xlab = "Number of Visits", ylab= "Number of Patients")
+
+hist(num.visits$visits, breaks=5000, col = "green", xlim = c(1, 10), ylim = c(0,190000), main = "Figure 4D: Number of Patients with 1 to 10 Visits", xlab = "Number of Visits", ylab= "Number of Patients")
+
+hist(num.visits$visits, breaks=5000, col = "yellowgreen", xlim = c(5, 10), ylim = c(0,30000), main = "Figure 4E: Number of Patients with 5 to 10 Visits", xlab = "Number of Visits", ylab= "Number of Patients")
+
+
+hist(num.visits$visits, breaks=5000, col = "lightblue", xlim = c(0, 50), ylim = c(0,100000), main = "Figure 4F: Number of Patients with 1 to 50 Visits", xlab = "Number of Visits", ylab= "Number of Patients")
+
+
+hist(num.visits$visits, breaks=500, col = "orange", xlim = c(500, 1000), ylim = c(0,35), main = "Figure 4G: Number of Patients with 500 to 1000 Visits", xlab = "Number of Visits", ylab= "Number of Patients")
+
+hist(num.visits$visits, breaks=500, col = "red", xlim = c(990, 4000), ylim = c(0,5), main = "Figure 4H: Number of Patients with 1000 to 4000 Visits", xlab = "Number of Visits", ylab= "Number of Patients")
+
+
+# freq_pts <- num.visits[which(num.visits$visits >100), ]
+# num.visits2 <- num.visits2[which(num.visits$num.visits > 5), ]
+# plot(num.visits2$num.visits)
+# hist(freq_pts$visits, breaks = 500, xlim = c(100, 4000))
+
+```
+
+[**Part D: Data Visualization**]{.underline}
+
+**Section 2:** Scatter plots of BMI values: Visualizations of the calculated BMI values are presented in figures 4I and 4J. BMIs exceeding 50 are not uncommon in this data set as are values at or close to zero, but this is likely related to the aforementioned errors in data entry for height and weight data.
+
+```{r}
+#| label: "BMI visualization"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+pts_encout <- group_by(pts_encout, age, gender, BMI)
+
+# plot(pts_encout$BMI, pts_encout$age, col=(pts_encout$gender))
+
+bmi.plot1 <- ggplot(pts_encout, aes(x=BMI, y=age, color=(gender))) + 
+   geom_point(size=1, alpha=0.4) +
+   scale_colour_manual(values = c("hotpink", "slateblue")) +
+   theme_light() +
+   xlab("BMI") +
+   ylab("Age") +
+   theme(legend.title = element_blank()) +
+   xlim(0, 100) +
+   ggtitle("Figure 4I: Age vs BMI and Gender")
+
+bmi.plot1
+
+
+bmi.plot1 +
+   geom_point() +
+   facet_grid(race ~ gender) +
+   ggtitle("Figure 4J: Age and BMI by Gender and Race") +
+   theme(strip.text = element_text(size = 8, color = "black"))
+
+
+```
+
+[**Part E: Missing Values**]{.underline}
+
+Analysis of missing data was completed. Of concern is the over 1.6 million records with missing discharge dates which makes it impossible to calculate the length of stay for these encounters.
+
+Medication dose including units is missing in over 600,000 records. This is vital information for tracing historical treatments administered to patients and makes it impossible to verify against the in stock medications to validate if the appropriate drug was administered to the appropriate patient. This is much higher than is expected to occur by chance and may point to a larger systems issue within the external facility which made documenting the dose and units burdensome for providers.
+
+Height and weight data are both missing in over 7.6 million records. Medications which are dosed by patient weight or body surface area are unable to be calculated from the provided data. The rate of missing data in height and weight categories is extremely high.
+
+```{r}
+#| label: "Missing Values"
+#| echo: false
+#| warning: false
+#| message: false
+#| results: false
+
+##### Part E. Missing Data ######
+# Missing values. Some variables may have missing data. What are the approximate 
+# rates of missing data? 
+# Would any of these have an impact on data analysis? 
+# You may keep this discussion mostly qualitative, and you don’t have to report 
+# on every single variable – just the ones you think might be most 
+# important in typical analyses. Please discuss at least four variables.
+
+### Encounters data frame
+length(which(is.na(encounters$encounter_id))) # 0
+length(which(is.na(encounters$patient_id))) # 0
+length(which(is.na(encounters$admit_date))) # 0
+length(which(is.na(encounters$discharge_date))) # 1601615
+length(which(is.na(encounters$department_id))) # 0
+length(which(is.na(encounters$provider_id))) # 0
+length(which(is.na(encounters$age))) # 0
+length(which(is.na(encounters$bp_systolic))) # 7997226
+length(which(is.na(encounters$bp_diastolic))) # 7997275
+length(which(is.na(encounters$temperature))) # 8055922
+length(which(is.na(encounters$pulse))) # 7992277
+length(which(is.na(encounters$height))) # 8128159
+length(which(is.na(encounters$weight))) # 7665347
+length(which(is.na(encounters$los))) # 1601615 -- matches up with those with no d.c date above
+
+### Department Data Frame
+length(which(is.na(departments$department_id))) # 0 
+length(which(is.na(departments$department_name))) # 0
+
+### diseases
+length(which(is.na(diseases$encounter_id))) # 0
+length(which(is.na(diseases$disease_id))) # 0
+length(which(is.na(diseases$date))) # 0
+
+### disease_types
+length(which(is.na(disease_types$disease_id))) # 0
+length(which(is.na(disease_types$icd9cm))) # 0
+length(which(is.na(disease_types$name))) # 0
+
+### Providers Data Frame
+length(which(is.na(providers$provider_id))) # 0
+length(which(is.na(providers$first_name))) # 0
+length(which(is.na(providers$middle_initial))) # 0
+length(which(is.na(providers$last_name))) # 0
+length(which(is.na(providers$gender))) # 0
+length(which(is.na(providers$status))) # 0
+
+### Patients Data frame
+length(which(is.na(patients$patient_id))) # 0
+length(which(is.na(patients$first_name))) # 0
+length(which(is.na(patients$middle_initial))) # 0
+length(which(is.na(patients$last_name))) # 0
+length(which(is.na(patients$gender))) # 0
+length(which(is.na(patients$race))) # 0
+length(which(is.na(patients$religion))) # 0
+length(which(is.na(patients$birth_date))) # 0
+length(which(is.na(patients$marital_status))) # 0
+length(which(is.na(patients$language))) # 0
+length(which(is.na(patients$occupation))) # 0
+length(which(is.na(patients$street))) # 0
+length(which(is.na(patients$city))) # 0
+length(which(is.na(patients$state))) # 0
+length(which(is.na(patients$zip))) # 0
+
+### Medication types
+length(which(is.na(medication_types$medication_id))) # 0
+length(which(is.na(medication_types$medication_name))) # 0
+length(which(is.na(medication_types$class))) # 0
+length(which(is.na(medication_types$strength))) # 0
+length(which(is.na(medication_types$strength_units))) # 0
+length(which(is.na(medication_types$form))) # 0
+length(which(is.na(medication_types$route))) # 0
+
+### Medications 
+length(which(is.na(medications$medications_id))) # 0
+length(which(is.na(medications$encounter_id))) # 0
+length(which(is.na(medications$medication_id))) # 0
+length(which(is.na(medications$patient_id))) # 0
+length(which(is.na(medications$date))) # 0
+length(which(is.na(medications$dose))) # 602234
+length(which(is.na(medications$dose_units))) # 602234
+length(which(is.na(medications$rate))) # 2081424
+length(which(is.na(medications$rate_units))) # 2081424
+
+
+```
+
+[**Part F: Data validation**]{.underline} As discussed earlier in this report, the values for height and weight are often missing and also commonly unreasonable values given other reported patient characteristics. Recommendation is to omit height and weight information when assimilating the external database information into the current EHR. Updated height and weight information should be obtained at each patient's initial visit to the new health facility.
+
+The encounters information imported from the external facility did not appear to have duplicated records of patient admissions, each encounter id and patient id combination were unique. Admission and discharge dates are noted to be identical in many encounters. This will skew the length of stay data significantly, thus the length of stay values less than one day were eliminated from the above length of stay analysis.
+
+Pulse readings that are much lower than normal (\< 40 bpm) is very concerning and unclear as to the cause of this erroneous data. It is interesting that many of the readings with an unreasonable pulse rate have a perfectly reasonable blood pressure reading for both systolic and diastolic. It is possible the external system required providers to enter some data into the pulse field and users simply added any digit to get past this field, but then forgot to go back and add the correct data at a later date. Omitting pulse readings less than 40 bpm would be the most reasonable course of action during import.
+
+Multiple blood pressure readings are significantly below the normal range. Omitting systolic blood pressures less than 70 mmHg and diastolic blood pressure readings less than 30 mmHg would leave a large range of possibly valid blood pressure readings remaining which are likely to have clinical relevance. Systolic blood pressures greater than 200 mmHg are likely to be data entry errors. Blood pressure readings over 200 systolic and 120 diastolic are considered a hypertensive emergency with a diagnosis of malignant hypertension. It is notable that 677 cases of malignant hypertension were noted in this data set which is more than is expected. It also raises concern that deleting extremely high blood pressure values may remove clinically relevant data.
+
+```{r}
+#| label: "Data Validation"
+#| echo: false
+#| warning: false
+#| message: false
+
+
+## BMIs are way to high
+
+## Weights are not in consistent units based on recorded values
+
+## Ranges of observed values for variables and report
+
+
+```
+
+[**Part 2: Challenges**]{.underline}
+
+**Section 1:** Validation of ages was performed using the reported date of birth in the patients table and the admission date in the encounters table. Largely, the ages of the patients appear to be reliable and calculations show that 99.96% of the ages reported were correct and only 0.04% of the ages were significantly incorrect.
+
+**Section 2:** Anonymity and de-identification of the data would be required prior to sharing the data externally as names, birthdates, ages and other identifying characteristics are present within this data set. These details are needed for the assimilation of data into the new health facility's record system, but it would not be appropriate to share this data set without first eliminating identifying information. Recommendations for anonymizing this data include and are not limited to: - Suppress all patient name fields (first_name, last_name, middle_initial) - Suppress all birth_date fields from patients table - Replace patient identification numbers (patient_id) with a randomly generated digit and retain in a secure location any files such as keys which would allow connection of the new id number to the prior id number - Adjust admission and discharge dates by a set amount or eliminate the dates and provide only the length of stay data - Suppress marital status. There are a limited number of Divorced or Widowed Pacific Islander Male patients (3 total) so it would not be challenging to identify these individuals if a person were motivated to do so. Consider grouping race groups into larger categories to enhance the anonymity of the data prior to any external release.
+
+```{r}
+#| label: "Age Validation"
+#| echo: false
+#| warning: false
+#| message: false
+library(lubridate)
+library(dplyr)
+
+dob.df <- data.frame(dob=as_date(pts_encout$birth_date[1:10]), admit=as_date(pts_encout$admit_date[1:10]), age=pts_encout$age[1:10], BMI=pts_encout$BMI[1:10], pt.id=pts_encout$patient_id[1:10])
+# View(dob.df)
+dob.df$BMI <- c("NA","NA", 20:27)
+dob.df <- mutate(dob.df, slice.dates = (dob.df$admit - dob.df$dob))
+dob.df <- mutate(dob.df, age.calculated = round(as.numeric(slice.dates)/365.25, digits = 2))
+
+dob.df <- mutate(dob.df, compare.ages = if_else(dob.df$age-dob.df$age.calculated < 1, "yes", "no"))
+
+
+dob.df2 <- data.frame(dob= as_date(pts_encout$birth_date), admit= as_date(pts_encout$admit_date), age= as.numeric(pts_encout$age), BMI=as.numeric(pts_encout$BMI), pt.id=pts_encout$patient_id)
+dob.df2 <- mutate(dob.df2, date.math = dob.df2$admit - dob.df2$dob)
+dob.df2 <- mutate(dob.df2, age.calculation = round(as.numeric(dob.df2$date.math)/365.25, digits = 2))
+dob.df2 <- mutate(dob.df2, compare.ages = if_else(dob.df2$age-dob.df2$age.calculation < 1, "yes", "no"))
+# length(which(dob.df2$compare.ages == "no"))
+# length(which(dob.df2$compare.ages == "yes"))
+# length(dob.df2$compare.ages)
+
+dob.accuracy <- 100*(length(which(dob.df2$compare.ages == "no")) /length(which(dob.df2$compare.ages == "yes")))
+dob.accuracy2 <- 100*(length(which(dob.df2$compare.ages == "yes")) / length(dob.df2$compare.ages))
+
+# Many failed attempts at validating the most recent BMI measurements.
+# View(dob.df2)
+#, as_date(pts_encout$birth_date))
+# 
+# dob.df$BMI <- c(21:30)
+# dob.df$pt.id <- pts_encout$patient_id[1:10]
+# dob.df <- group_by(dob.df, pt.id)
+# max_date = max(dob.df$admit)
+# summarise(dob.df, BMI[max_date], max_date) ### this series works. extrapolate.
+# 
+# 
+# select(dob.df, pt.id, admit)
+# 
+# 
+# dob.df2$bmi <- pts_encout$BMI
+# dob.df2$pt.id <- pts_encout$patient_id
+# 
+# dob.df2 |>
+#    group_by(pt.id) |>
+#    summarise(BMI, max_date = max(admit)) |>
+#    group_vars()
+#    
+
+
+```
